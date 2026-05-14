@@ -381,7 +381,7 @@ function BrowserPanelImpl({ projectId, socket, onRunQuickAction }: BrowserPanelP
         <div className="min-h-0 flex-1 overflow-hidden">
           {!address ? (
             <div className="h-full overflow-y-auto p-3 ">
-              <div className="h-full mx-auto max-w-[450px] flex flex-col" style={{justifyContent: "safe center"}}>
+              <div className="h-full mx-auto max-w-[450px] flex flex-col" style={{justifyContent: "start"}}>
               <div className="pl-1 mb-3 flex items-center gap-2 text-sm font-medium">
                 <Globe className="h-4 w-4 text-muted-foreground" />
                 <span>Local Servers</span>
