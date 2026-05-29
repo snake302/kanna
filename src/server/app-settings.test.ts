@@ -52,6 +52,10 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
         planMode: false,
       },
     },
+    providerCommands: {
+      claude: "",
+      codex: "",
+    },
     warning: null,
     filePathDisplay: filePath,
     ...overrides,
@@ -136,6 +140,9 @@ describe("AppSettingsManager", () => {
           modelOptions: { reasoningEffort: "high", fastMode: true },
         },
       },
+      providerCommands: {
+        codex: "codex-multi-auth-codex",
+      },
     })
     const nextPayload = JSON.parse(await readFile(filePath, "utf8")) as {
       analyticsUserId: string
@@ -144,6 +151,7 @@ describe("AppSettingsManager", () => {
       terminal: { scrollbackLines: number; minColumnWidth: number }
       editor: { preset: string; commandTemplate: string }
       providerDefaults: { codex: { modelOptions: { fastMode: boolean } } }
+      providerCommands: { codex: string }
     }
 
     expect(snapshot.theme).toBe("dark")
@@ -153,10 +161,29 @@ describe("AppSettingsManager", () => {
     expect(snapshot.editor.preset).toBe("vscode")
     expect(snapshot.editor.commandTemplate).toBe("cursor {path}")
     expect(snapshot.providerDefaults.codex.modelOptions.fastMode).toBe(true)
+    expect(snapshot.providerCommands.codex).toBe("codex-multi-auth-codex")
     expect(nextPayload.analyticsUserId).toBe(initialPayload.analyticsUserId)
     expect(nextPayload.theme).toBe("dark")
     expect(nextPayload.chatSoundId).toBe("glass")
+    expect(nextPayload.providerCommands.codex).toBe("codex-multi-auth-codex")
 
     manager.dispose()
+  })
+
+  test("trims provider commands and falls back to empty commands", async () => {
+    const filePath = await createTempFilePath()
+    await writeFile(filePath, JSON.stringify({
+      providerCommands: {
+        claude: "  claude-multi-auth-claude  ",
+        codex: 123,
+      },
+    }), "utf8")
+
+    const snapshot = await readAppSettingsSnapshot(filePath)
+
+    expect(snapshot.providerCommands).toEqual({
+      claude: "claude-multi-auth-claude",
+      codex: "",
+    })
   })
 })

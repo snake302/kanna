@@ -103,6 +103,10 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
       planMode: false,
     },
   },
+  providerCommands: {
+    claude: "",
+    codex: "",
+  },
   warning: null,
   filePathDisplay: "~/.kanna/data/settings.json",
 }

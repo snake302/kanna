@@ -8,6 +8,7 @@ import type {
   NormalizedToolCall,
   PendingToolSnapshot,
   KannaStatus,
+  ProviderCommandSettings,
   QueuedChatMessage,
   TranscriptEntry,
 } from "../shared/types"
@@ -107,6 +108,7 @@ interface AgentCoordinatorArgs {
   analytics?: AnalyticsReporter
   codexManager?: CodexAppServerManager
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
+  providerCommands?: Partial<ProviderCommandSettings>
   startClaudeSession?: (args: {
     localPath: string
     model: string
@@ -114,6 +116,7 @@ interface AgentCoordinatorArgs {
     planMode: boolean
     sessionToken: string | null
     forkSession: boolean
+    command?: string
     onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   }) => Promise<ClaudeSessionHandle>
 }
@@ -145,6 +148,17 @@ interface SendMessageOptions {
   modelOptions?: ModelOptions
   effort?: string
   planMode?: boolean
+}
+
+function normalizeProviderCommand(value: unknown) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function normalizeProviderCommands(value?: Partial<ProviderCommandSettings>): ProviderCommandSettings {
+  return {
+    claude: normalizeProviderCommand(value?.claude),
+    codex: normalizeProviderCommand(value?.codex),
+  }
 }
 
 function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
@@ -561,6 +575,7 @@ async function startClaudeSession(args: {
   planMode: boolean
   sessionToken: string | null
   forkSession: boolean
+  command?: string
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
 }): Promise<ClaudeSessionHandle> {
   const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -632,7 +647,7 @@ async function startClaudeSession(args: {
       canUseTool,
       tools: [...CLAUDE_TOOLSET],
       settingSources: ["user", "project", "local"],
-      pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,
+      pathToClaudeCodeExecutable: (args.command || process.env.CLAUDE_EXECUTABLE)?.replace(/^~(?=\/|$)/, homedir()) || undefined,
       env: (() => { const { CLAUDECODE: _, ...env } = process.env; return env })(),
     },
   })
@@ -681,6 +696,7 @@ export class AgentCoordinator {
   private readonly analytics: AnalyticsReporter
   private readonly codexManager: CodexAppServerManager
   private readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
+  private readonly providerCommands: ProviderCommandSettings
   private readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   private reportBackgroundError: ((message: string) => void) | null = null
   readonly activeTurns = new Map<string, ActiveTurn>()
@@ -691,7 +707,8 @@ export class AgentCoordinator {
     this.store = args.store
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
-    this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.providerCommands = normalizeProviderCommands(args.providerCommands)
+    this.codexManager = args.codexManager ?? new CodexAppServerManager({ command: this.providerCommands.codex })
     this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
   }
@@ -1094,6 +1111,7 @@ export class AgentCoordinator {
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
+        command: this.providerCommands.claude,
         onToolRequest: args.onToolRequest,
       })
       this.refreshClaudeModelCatalog(started)

@@ -44,6 +44,10 @@ export function mergeAppSettingsPatch(
         },
       },
     },
+    providerCommands: {
+      ...settings.providerCommands,
+      ...patch.providerCommands,
+    },
   }
 }
 
