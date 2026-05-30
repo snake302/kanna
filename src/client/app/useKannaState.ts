@@ -689,6 +689,7 @@ export interface KannaState {
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>
   handleSignOut: () => Promise<void>
   handleSend: (content: string, options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean }) => Promise<void>
+  handleRetryLastTurn: () => Promise<void>
   handleSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
   handleRemoveQueuedMessage: (queuedMessageId: string) => Promise<void>
   handleCancel: () => Promise<void>
@@ -1652,6 +1653,19 @@ export function useKannaState(activeChatId: string | null): KannaState {
     }
   }, [activeChatId, socket])
 
+  const handleRetryLastTurn = useCallback(async () => {
+    if (!activeChatId) return
+    try {
+      await socket.command({
+        type: "chat.retry",
+        chatId: activeChatId,
+      })
+      setCommandError(null)
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }, [activeChatId, socket])
+
   const handleRemoveQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
     try {
@@ -2068,6 +2082,7 @@ export function useKannaState(activeChatId: string | null): KannaState {
     handleValidateLlmProvider,
     handleSignOut,
     handleSend,
+    handleRetryLastTurn,
     handleSteerQueuedMessage,
     handleRemoveQueuedMessage,
     handleCancel,

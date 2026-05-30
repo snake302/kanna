@@ -1,12 +1,13 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDown, Flower, Upload } from "lucide-react"
+import { ArrowDown, Flower, RotateCcw, Upload } from "lucide-react"
 import { AnimatedShinyText } from "../../components/ui/animated-shiny-text"
 import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../../components/messages/shared"
 import { ProcessingMessage } from "../../components/messages/ProcessingMessage"
 import { ContextMenu, ContextMenuTrigger } from "../../components/ui/context-menu"
+import { Button } from "../../components/ui/button"
 import { OpenExternalContextMenuContent } from "../../components/open-external-menu"
 import { cn } from "../../lib/utils"
 import { shouldOpenLocalFileLinkInEditor } from "../../lib/pathUtils"
@@ -37,6 +38,7 @@ interface ChatTranscriptViewportProps {
   runtimeStatus: string | null
   isDraining: boolean
   commandError: string | null
+  onRetryCommandError?: () => void
   loadOlderHistory: () => Promise<void>
   onStopDraining: () => void
   onSteerQueuedMessage: (queuedMessageId: string) => Promise<void>
@@ -71,6 +73,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
   runtimeStatus,
   isDraining,
   commandError,
+  onRetryCommandError,
   loadOlderHistory,
   onStopDraining,
   onSteerQueuedMessage,
@@ -254,9 +257,7 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
         <DrainingIndicator onStop={() => void onStopDraining()} />
       ) : null}
       {commandError ? (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {commandError}
-        </div>
+        <CommandErrorBanner message={commandError} onRetry={onRetryCommandError} />
       ) : null}
     </div>
   )
@@ -385,6 +386,32 @@ export const ChatTranscriptViewport = memo(function ChatTranscriptViewport({
     </>
   )
 })
+
+export function CommandErrorBanner({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry?: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+      <span className="min-w-0 flex-1 break-words">{message}</span>
+      {onRetry ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 border-destructive/25 bg-background/60 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onRetry}
+        >
+          <RotateCcw className="mr-1.5 size-3.5" />
+          Retry
+        </Button>
+      ) : null}
+    </div>
+  )
+}
 
 function keyExtractor(item: ResolvedTranscriptRow) {
   return item.id

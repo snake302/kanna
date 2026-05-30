@@ -263,6 +263,55 @@ describe("ws-router", () => {
     ])
   })
 
+  test("routes chat.retry through the agent", async () => {
+    const retriedChatIds: string[] = []
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: {
+        getActiveStatuses: () => new Map(),
+        getDrainingChatIds: () => new Set(),
+        retry: async (command: { chatId: string }) => {
+          retriedChatIds.push(command.chatId)
+          return { chatId: command.chatId }
+        },
+      } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "retry-1",
+        command: { type: "chat.retry", chatId: "chat-1" },
+      })
+    )
+
+    expect(retriedChatIds).toEqual(["chat-1"])
+    expect(ws.sent).toEqual([
+      {
+        v: PROTOCOL_VERSION,
+        type: "ack",
+        id: "retry-1",
+        result: { chatId: "chat-1" },
+      },
+    ])
+  })
+
   test("reads and writes llm provider settings via commands", async () => {
     const writes: Array<Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">> = []
     const router = createWsRouter({

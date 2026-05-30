@@ -957,6 +957,7 @@ export function ChatPage() {
           runtimeStatus={state.runtimeStatus}
           isDraining={state.isDraining}
           commandError={state.commandError}
+          onRetryCommandError={state.activeChatId ? state.handleRetryLastTurn : undefined}
           loadOlderHistory={state.loadOlderHistory}
           onStopDraining={state.handleStopDraining}
           onSteerQueuedMessage={state.handleSteerQueuedMessage}
