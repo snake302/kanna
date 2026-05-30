@@ -1521,7 +1521,8 @@ export function useKannaState(activeChatId: string | null): KannaState {
     options?: { provider?: AgentProvider; model?: string; modelOptions?: ModelOptions; planMode?: boolean; attachments?: import("../../shared/types").ChatAttachment[] }
   ) => {
     const attachments = options?.attachments ?? []
-    if (activeChatId && isProcessing) {
+    const activeProvider = activeChatSnapshot?.runtime?.provider ?? null
+    if (activeChatId && isProcessing && activeProvider !== "codex") {
       try {
         await socket.command<{ queuedMessageId: string }>({
           type: "message.enqueue",

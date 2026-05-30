@@ -90,6 +90,16 @@ export interface TurnInterruptParams {
   turnId: string
 }
 
+export interface TurnSteerParams {
+  threadId: string
+  input: CodexUserInput[]
+  expectedTurnId: string
+}
+
+export interface TurnSteerResponse {
+  turnId: string
+}
+
 export interface ThreadSummary {
   id: string
 }
