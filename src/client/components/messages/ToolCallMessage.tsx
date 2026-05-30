@@ -6,6 +6,7 @@ import { stripWorkspacePath } from "../../lib/pathUtils"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import { formatBashCommandTitle, toTitleCase } from "../../lib/formatters"
 import { FileContentView } from "./FileContentView"
+import type { SubagentTaskInput } from "../../../shared/types"
 
 interface Props {
   message: ProcessedToolCall
@@ -17,6 +18,106 @@ type ReadImageBlock = {
   type: "image"
   data: string
   mimeType?: string
+}
+
+const SUBAGENT_ACTION_TITLES: Record<string, string> = {
+  spawnAgent: "Start subagent",
+  sendInput: "Send input to subagent",
+  resumeAgent: "Resume subagent",
+  wait: "Wait for subagent",
+  closeAgent: "Close subagent",
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function getReceiverLabel(input: SubagentTaskInput) {
+  const count = input.receiverThreadIds?.length ?? 0
+  if (count > 1) return `${count} subagents`
+  return "subagent"
+}
+
+export function getSubagentActionTitle(input: SubagentTaskInput, toolName = "Task") {
+  const action = input.subagentType
+  if (action === "sendInput") return `Send input to ${getReceiverLabel(input)}`
+  if (action === "resumeAgent") return `Resume ${getReceiverLabel(input)}`
+  if (action === "wait") return `Wait for ${getReceiverLabel(input)}`
+  if (action === "closeAgent") return `Close ${getReceiverLabel(input)}`
+  if (action === "spawnAgent") return "Start subagent"
+  if (action) return `Run ${toTitleCase(action)} subagent`
+  return toolName
+}
+
+function getSubagentResultValue(result: unknown, key: string): unknown {
+  return asRecord(result)?.[key]
+}
+
+function getSubagentDisplayInput(input: SubagentTaskInput, result: unknown): SubagentTaskInput {
+  const resultRecord = asRecord(result)
+  if (!resultRecord) return input
+
+  return {
+    ...input,
+    status: typeof resultRecord.status === "string" ? resultRecord.status : input.status,
+    prompt: typeof resultRecord.prompt === "string" || resultRecord.prompt === null ? resultRecord.prompt : input.prompt,
+    agentsStates: (asRecord(resultRecord.agentsStates) as SubagentTaskInput["agentsStates"] | null) ?? input.agentsStates,
+  }
+}
+
+export function SubagentTaskDetails({ input, result }: { input: SubagentTaskInput; result?: unknown }) {
+  const displayInput = getSubagentDisplayInput(input, result)
+  const receiverThreadIds = displayInput.receiverThreadIds ?? []
+  const agentsStates = displayInput.agentsStates
+    ?? (asRecord(getSubagentResultValue(result, "agentsStates")) as SubagentTaskInput["agentsStates"] | null)
+  const prompt = displayInput.prompt
+
+  return (
+    <div className="flex flex-col gap-3 text-xs">
+      <div className="grid gap-1.5">
+        <span className="font-medium text-muted-foreground">Action</span>
+        <div className="flex flex-wrap gap-2 text-foreground/80">
+          <span>{SUBAGENT_ACTION_TITLES[displayInput.subagentType ?? ""] ?? getSubagentActionTitle(displayInput)}</span>
+          {displayInput.status && <span className="text-muted-foreground">status: {displayInput.status}</span>}
+        </div>
+      </div>
+      {prompt && (
+        <MetaCodeBlock label="Prompt" copyText={prompt}>
+          {prompt}
+        </MetaCodeBlock>
+      )}
+      {(displayInput.senderThreadId || receiverThreadIds.length > 0) && (
+        <div className="grid gap-1.5">
+          <span className="font-medium text-muted-foreground">Threads</span>
+          <div className="grid gap-1 text-muted-foreground">
+            {displayInput.senderThreadId && (
+              <span>from {displayInput.senderThreadId}</span>
+            )}
+            {receiverThreadIds.length > 0 && (
+              <span>to {receiverThreadIds.join(", ")}</span>
+            )}
+          </div>
+        </div>
+      )}
+      {agentsStates && Object.keys(agentsStates).length > 0 && (
+        <div className="grid gap-1.5">
+          <span className="font-medium text-muted-foreground">Agents</span>
+          <div className="grid gap-1">
+            {Object.entries(agentsStates).map(([threadId, state]) => (
+              <div key={threadId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5">
+                <span className="truncate text-foreground/80">{threadId}</span>
+                <span className="text-muted-foreground">{state.status}</span>
+                {state.message && (
+                  <span className="col-span-2 text-muted-foreground">{state.message}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function extractReadImageBlocks(value: unknown): ReadImageBlock[] {
@@ -127,7 +228,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
       return `${toTitleCase(message.input.tool)} from ${toTitleCase(message.input.server)}`
     }
     if (message.toolKind === "subagent_task") {
-      return message.input.subagentType || message.toolName
+      return getSubagentActionTitle(message.input, message.toolName)
     }
     return message.toolName
   }, [message.input, message.toolName, localPath])
@@ -144,6 +245,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
   const isEditTool = message.toolKind === "edit_file"
   const isDeleteTool = message.toolKind === "delete_file"
   const isReadTool = message.toolKind === "read_file"
+  const isSubagentTool = message.toolKind === "subagent_task"
 
   const resultText = useMemo(() => {
     if (typeof message.result === "string") return message.result
@@ -202,6 +304,8 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
                 <FileContentView
                   content={message.input.content}
                 />
+              ) : isSubagentTool ? (
+                <SubagentTaskDetails input={message.input} result={message.result} />
               ) : !isReadTool && !isWriteTool && (
                 <MetaCodeBlock label={
                   isBashTool ? (
@@ -238,7 +342,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath }: Props
                   content={message.input.content}
                 />
               )}
-              {hasResult && !isReadTool && !(isWriteTool && !message.isError) && !(isEditTool && !message.isError) && !(isDeleteTool && !message.isError) && (
+              {hasResult && !isSubagentTool && !isReadTool && !(isWriteTool && !message.isError) && !(isEditTool && !message.isError) && !(isDeleteTool && !message.isError) && (
                 <MetaCodeBlock label={message.isError ? "Error" : "Result"} copyText={resultText}>
                   {resultText}
                 </MetaCodeBlock>

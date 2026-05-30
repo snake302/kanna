@@ -72,6 +72,19 @@ function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
   return !SPECIAL_TOOL_NAMES.has(toolName)
 }
 
+function getCollapsibleToolRunKey(message: HydratedTranscriptMessage): string | null {
+  if (!isCollapsibleToolCall(message)) return null
+  const tool = message as ProcessedToolCall
+  if (tool.toolKind === "subagent_task") {
+    return `subagent:${tool.input.subagentType ?? "unknown"}`
+  }
+  return "tool"
+}
+
+function canJoinCollapsibleToolRun(currentKey: string, nextKey: string) {
+  return currentKey === nextKey || (currentKey === "tool" && nextKey === "tool")
+}
+
 function getTranscriptMessageRenderState(
   message: HydratedTranscriptMessage,
   {
@@ -150,9 +163,11 @@ export function buildTranscriptRenderItems(
   while (index < messages.length) {
     const message = messages[index]
     const renderState = renderStates[index]
-    if (renderState?.shouldRender && isCollapsibleToolCall(message)) {
+    const runKey = getCollapsibleToolRunKey(message)
+    if (renderState?.shouldRender && runKey) {
       const group: HydratedTranscriptMessage[] = [message]
       const startIndex = index
+      let currentRunKey = runKey
       index += 1
 
       while (index < messages.length) {
@@ -162,8 +177,10 @@ export function buildTranscriptRenderItems(
           index += 1
           continue
         }
-        if (!isCollapsibleToolCall(nextMessage)) break
+        const nextRunKey = getCollapsibleToolRunKey(nextMessage)
+        if (!nextRunKey || !canJoinCollapsibleToolRun(currentRunKey, nextRunKey)) break
         group.push(nextMessage)
+        currentRunKey = nextRunKey
         index += 1
       }
 

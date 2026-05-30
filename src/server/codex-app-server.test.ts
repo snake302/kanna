@@ -1130,7 +1130,16 @@ describe("CodexAppServerManager", () => {
     expect(toolCall?.entry.kind).toBe("tool_call")
     if (!toolCall || toolCall.entry.kind !== "tool_call") throw new Error("missing tool call")
     expect(toolCall.entry.tool.toolKind).toBe("subagent_task")
-    expect(toolCall.entry.tool.input).toEqual({ subagentType: "spawnAgent" })
+    expect(toolCall.entry.tool.input).toEqual({
+      subagentType: "spawnAgent",
+      status: "completed",
+      senderThreadId: "thread-1",
+      receiverThreadIds: ["thread-2"],
+      prompt: "Inspect tests",
+      agentsStates: {
+        "thread-2": { status: "running", message: "Inspecting" },
+      },
+    })
   })
 
   test("uses the completed webSearch query when the started item is empty", async () => {

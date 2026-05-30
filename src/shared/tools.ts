@@ -6,12 +6,72 @@ import type {
   HydratedToolCall,
   NormalizedToolCall,
   ReadFileToolResult,
+  SubagentTaskAgentState,
+  SubagentTaskInput,
   TodoItem,
 } from "./types"
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   return value as Record<string, unknown>
+}
+
+function optionalString(record: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string") return value
+  }
+  return undefined
+}
+
+function optionalStringOrNull(record: Record<string, unknown>, ...keys: string[]): string | null | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" || value === null) return value
+  }
+  return undefined
+}
+
+function optionalStringArray(record: Record<string, unknown>, ...keys: string[]): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      const strings = value.filter((entry): entry is string => typeof entry === "string")
+      if (strings.length === value.length) return strings
+    }
+  }
+  return undefined
+}
+
+function normalizeSubagentStates(value: unknown): Record<string, SubagentTaskAgentState> | undefined {
+  const record = asRecord(value)
+  if (!record) return undefined
+
+  const states: Record<string, SubagentTaskAgentState> = {}
+  for (const [threadId, state] of Object.entries(record)) {
+    const stateRecord = asRecord(state)
+    if (!stateRecord) continue
+    const status = stateRecord.status
+    if (typeof status !== "string") continue
+    states[threadId] = {
+      status,
+      message: optionalStringOrNull(stateRecord, "message"),
+    }
+  }
+
+  return Object.keys(states).length > 0 ? states : undefined
+}
+
+export function normalizeSubagentTaskInput(input: Record<string, unknown>): SubagentTaskInput {
+  return {
+    subagentType: optionalString(input, "subagent_type", "subagentType")
+      ?? (input.type === "collabAgentToolCall" ? optionalString(input, "tool") : undefined),
+    status: optionalString(input, "status"),
+    senderThreadId: optionalString(input, "senderThreadId", "sender_thread_id"),
+    receiverThreadIds: optionalStringArray(input, "receiverThreadIds", "receiver_thread_ids"),
+    prompt: optionalStringOrNull(input, "prompt"),
+    agentsStates: normalizeSubagentStates(input.agentsStates ?? input.agents_states),
+  }
 }
 
 export function normalizeToolCall(args: {
@@ -169,15 +229,14 @@ export function normalizeToolCall(args: {
     }
   }
 
-  if (typeof input.subagent_type === "string") {
+  const subagentInput = normalizeSubagentTaskInput(input)
+  if (subagentInput.subagentType) {
     return {
       kind: "tool",
       toolKind: "subagent_task",
       toolName,
       toolId,
-      input: {
-        subagentType: input.subagent_type,
-      },
+      input: subagentInput,
       rawInput: input,
     }
   }

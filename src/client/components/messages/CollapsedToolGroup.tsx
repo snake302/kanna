@@ -20,7 +20,6 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   bash: { key: "bash", singular: "command", plural: "commands" },
   grep: { key: "grep", singular: "search", plural: "searches" },
   glob: { key: "glob", singular: "glob", plural: "globs" },
-  subagent_task: { key: "task", singular: "agent", plural: "agents" },
   web_search: { key: "websearch", singular: "web search", plural: "web searches" },
   skill: { key: "skill", singular: "skill", plural: "skills" },
   todo_write: { key: "todo", singular: "todo update", plural: "todo updates" },
@@ -28,8 +27,25 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
 const OTHER_CATEGORY: ToolCategory = { key: "other", singular: "tool call", plural: "tool calls" }
 
-function getToolCategory(toolKind: string): ToolCategory {
-  return TOOL_CATEGORIES[toolKind] ?? OTHER_CATEGORY
+const SUBAGENT_CATEGORIES: Record<string, Omit<ToolCategory, "key">> = {
+  spawnAgent: { singular: "agent start", plural: "agent starts" },
+  sendInput: { singular: "agent input", plural: "agent inputs" },
+  resumeAgent: { singular: "agent resume", plural: "agent resumes" },
+  wait: { singular: "agent wait", plural: "agent waits" },
+  closeAgent: { singular: "agent close", plural: "agent closes" },
+}
+
+function getToolCategory(message: ProcessedToolCall): ToolCategory {
+  if (message.toolKind === "subagent_task") {
+    const subagentType = message.input.subagentType ?? "unknown"
+    const category = SUBAGENT_CATEGORIES[subagentType] ?? { singular: "agent action", plural: "agent actions" }
+    return {
+      key: `subagent:${subagentType}`,
+      ...category,
+    }
+  }
+
+  return TOOL_CATEGORIES[message.toolKind] ?? OTHER_CATEGORY
 }
 
 function getToolGroupLabel(messages: HydratedTranscriptMessage[]): string {
@@ -37,8 +53,7 @@ function getToolGroupLabel(messages: HydratedTranscriptMessage[]): string {
   const order: string[] = []
 
   for (const msg of messages) {
-    const toolKind = (msg as ProcessedToolCall).toolKind
-    const category = getToolCategory(toolKind)
+    const category = getToolCategory(msg as ProcessedToolCall)
 
     const existing = counts.get(category.key)
     if (existing) {

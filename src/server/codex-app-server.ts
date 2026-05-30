@@ -10,6 +10,7 @@ import type {
   TodoItem,
   TranscriptEntry,
 } from "../shared/types"
+import { normalizeSubagentTaskInput } from "../shared/tools"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,
@@ -339,6 +340,8 @@ function genericDynamicToolCall(toolId: string, toolName: string, input: Record<
 }
 
 function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
+  const rawInput = item as unknown as Record<string, unknown>
+
   return timestamped({
     kind: "tool_call",
     tool: {
@@ -346,10 +349,8 @@ function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
       toolKind: "subagent_task",
       toolName: "Task",
       toolId: item.id,
-      input: {
-        subagentType: item.tool,
-      },
-      rawInput: item as unknown as Record<string, unknown>,
+      input: normalizeSubagentTaskInput(rawInput),
+      rawInput,
     },
   })
 }
