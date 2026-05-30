@@ -1246,6 +1246,74 @@ describe("AgentCoordinator codex integration", () => {
     expect(discardedResult.content).toEqual({ discarded: true })
     expect(startTurnCalls).toEqual(["plan this"])
   })
+
+  test("steers active Codex turns instead of queueing follow-up messages", async () => {
+    const events = new AsyncEventQueue<any>()
+    const steerCalls: Array<{ chatId: string; content: string }> = []
+    const fakeCodexManager = {
+      async startSession() {
+        return "thread-1"
+      },
+      async startTurn(): Promise<HarnessTurn> {
+        events.push({
+          type: "transcript" as const,
+          entry: timestamped({
+            kind: "system_init",
+            provider: "codex",
+            model: "gpt-5.4",
+            tools: [],
+            agents: [],
+            slashCommands: [],
+            mcpServers: [],
+          }),
+        })
+
+        return {
+          provider: "codex",
+          stream: events,
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+      async steerTurn(args: { chatId: string; content: string }) {
+        steerCalls.push(args)
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "start agents",
+      model: "gpt-5.4",
+    })
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "how are the agents doing?",
+      model: "gpt-5.4",
+    })
+
+    expect(steerCalls).toEqual([{
+      chatId: "chat-1",
+      content: "how are the agents doing?",
+    }])
+    expect(store.queuedMessages).toHaveLength(0)
+    expect(store.messages.filter((entry) => entry.kind === "user_prompt").map((entry: any) => entry.content)).toEqual([
+      "start agents",
+      "how are the agents doing?",
+    ])
+
+    events.close()
+  })
 })
 
 describe("AgentCoordinator claude integration", () => {
