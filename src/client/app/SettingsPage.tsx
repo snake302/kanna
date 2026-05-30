@@ -1115,6 +1115,15 @@ export function SettingsPage() {
     })
   }
 
+  function handleProviderCommandChange(provider: AgentProvider, command: string) {
+    if (provider === "claude") {
+      setClaudeCommandDraft(command)
+    } else {
+      setCodexCommandDraft(command)
+    }
+    commitProviderCommand(provider, command)
+  }
+
   async function commitKeybindings() {
     try {
       setKeybindingsError(null)
@@ -1680,7 +1689,7 @@ export function SettingsPage() {
                           <Input
                             id="claude-command"
                             value={claudeCommandDraft}
-                            onChange={(event) => setClaudeCommandDraft(event.target.value)}
+                            onChange={(event) => handleProviderCommandChange("claude", event.target.value)}
                             onBlur={() => commitProviderCommand("claude", claudeCommandDraft)}
                             onKeyDown={(event) => handleTextInputKeyDown(event, () => commitProviderCommand("claude", claudeCommandDraft))}
                             placeholder="claude"
@@ -1727,7 +1736,7 @@ export function SettingsPage() {
                           <Input
                             id="codex-command"
                             value={codexCommandDraft}
-                            onChange={(event) => setCodexCommandDraft(event.target.value)}
+                            onChange={(event) => handleProviderCommandChange("codex", event.target.value)}
                             onBlur={() => commitProviderCommand("codex", codexCommandDraft)}
                             onKeyDown={(event) => handleTextInputKeyDown(event, () => commitProviderCommand("codex", codexCommandDraft))}
                             placeholder="codex"
