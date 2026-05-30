@@ -209,7 +209,7 @@ Please check the latest error first.`,
     expect(html).not.toContain("Completed")
   })
 
-  test("does not render wrappers for short successful result rows", () => {
+  test("does not render wrappers for sub-second successful result rows", () => {
     const html = renderTranscript([
       {
         id: "result-short-1",
@@ -217,12 +217,29 @@ Please check the latest error first.`,
         success: true,
         cancelled: false,
         result: "Hey! 👋",
-        durationMs: 2562,
+        durationMs: 500,
         timestamp: new Date().toISOString(),
       },
     ])
 
     expect(countRowWrappers(html)).toBe(0)
+  })
+
+  test("renders wrappers for multi-second successful result rows", () => {
+    const html = renderTranscript([
+      {
+        id: "result-reasonable-1",
+        kind: "result",
+        success: true,
+        cancelled: false,
+        result: "Done",
+        durationMs: 2562,
+        timestamp: new Date().toISOString(),
+      },
+    ])
+
+    expect(countRowWrappers(html)).toBe(1)
+    expect(html).toContain("Worked for 2s")
   })
 
   test("renders wrappers for long successful result rows", () => {
@@ -380,7 +397,7 @@ Please check the latest error first.`,
         success: true,
         cancelled: false,
         result: "Done",
-        durationMs: 1000,
+        durationMs: 500,
         timestamp: new Date().toISOString(),
       },
       createToolMessage("tool-2"),

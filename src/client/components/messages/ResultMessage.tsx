@@ -5,6 +5,12 @@ interface Props {
   message: ProcessedResultMessage
 }
 
+export const RESULT_DURATION_VISIBLE_MIN_MS = 1000
+
+export function shouldShowResultDuration(durationMs: number) {
+  return durationMs >= RESULT_DURATION_VISIBLE_MIN_MS
+}
+
 export function ResultMessage({ message }: Props) {
   const formatDuration = (ms: number) => {
     if (ms < 1000) {
@@ -36,7 +42,7 @@ export function ResultMessage({ message }: Props) {
   }
 
   return (
-    <MetaRow className={`px-0.5 text-xs tracking-wide ${message.durationMs > 60000 ? '' : 'hidden'}`}>
+    <MetaRow className={`px-0.5 text-xs tracking-wide ${shouldShowResultDuration(message.durationMs) ? "" : "hidden"}`}>
       <div className="w-full h-[1px] bg-border"></div>
       <MetaLabel className="whitespace-nowrap text-[11px] tracking-widest text-muted-foreground/60 uppercase flex-shrink-0">Worked for {formatDuration(message.durationMs)}</MetaLabel>
       <div className="w-full h-[1px] bg-border"></div>

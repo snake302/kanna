@@ -712,6 +712,7 @@ export interface ResultEntry extends TranscriptEntryBase {
   subtype: "success" | "error" | "cancelled"
   isError: boolean
   durationMs: number
+  providerDurationMs?: number
   result: string
   costUsd?: number
 }
@@ -1040,7 +1041,7 @@ export type HydratedTranscriptMessage =
   | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; providerDurationMs?: number; costUsd?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "context_window_updated"; usage: ContextWindowUsageSnapshot; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "compact_boundary"; id: string; messageId?: string; timestamp: string; hidden?: boolean })

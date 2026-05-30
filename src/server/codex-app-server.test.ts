@@ -301,6 +301,64 @@ describe("CodexAppServerManager", () => {
     })
   })
 
+  test("emits Codex result duration from turn wall-clock time", async () => {
+    const originalDateNow = Date.now
+    let now = 10_000
+    Date.now = () => now
+
+    try {
+      const process = new FakeCodexProcess((message, child) => {
+        if (message.method === "initialize") {
+          child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+        } else if (message.method === "thread/start") {
+          child.writeServerMessage({
+            id: message.id,
+            result: { thread: { id: "thread-duration" }, model: "gpt-5.4", reasoningEffort: "high" },
+          })
+        } else if (message.method === "turn/start") {
+          child.writeServerMessage({
+            id: message.id,
+            result: { turn: { id: "turn-duration", status: "completed", error: null } },
+          })
+          now += 2500
+          child.writeServerMessage({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-duration",
+              turn: { id: "turn-duration", status: "completed", error: null },
+            },
+          })
+        }
+      })
+
+      const manager = new CodexAppServerManager({
+        spawnProcess: () => process as never,
+      })
+
+      await manager.startSession({
+        chatId: "chat-1",
+        cwd: "/tmp/project",
+        model: "gpt-5.4",
+        sessionToken: null,
+      })
+
+      const turn = await manager.startTurn({
+        chatId: "chat-1",
+        model: "gpt-5.4",
+        content: "Run pwd",
+        planMode: false,
+        onToolRequest: async () => ({}),
+      })
+
+      const events = await collectStream(turn.stream)
+      const result = events.find((event) => event.entry?.kind === "result")?.entry
+
+      expect(result?.durationMs).toBe(2500)
+    } finally {
+      Date.now = originalDateNow
+    }
+  })
+
   test("generateStructured returns the final assistant JSON and stops the transient session", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

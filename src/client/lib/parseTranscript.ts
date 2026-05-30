@@ -111,6 +111,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           cancelled: entry.subtype === "cancelled",
           result: entry.result,
           durationMs: entry.durationMs,
+          providerDurationMs: entry.providerDurationMs,
           costUsd: entry.costUsd,
         })
         break

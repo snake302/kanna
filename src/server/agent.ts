@@ -60,6 +60,7 @@ interface ActiveTurn {
   chatId: string
   provider: AgentProvider
   turn: HarnessTurn
+  startedAt: number
   claudePromptSeq?: number
   model: string
   effort?: string
@@ -179,6 +180,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function elapsedWallClockMs(startedAt: number, endedAt = Date.now()) {
+  return Math.max(0, endedAt - startedAt)
+}
+
+function withTurnWallClockDuration<T extends TranscriptEntry>(entry: T, startedAt: number): T {
+  if (entry.kind !== "result") return entry
+
+  return {
+    ...entry,
+    durationMs: elapsedWallClockMs(startedAt),
+  } as T
 }
 
 function escapeXmlAttribute(value: string) {
@@ -407,6 +421,7 @@ export function normalizeClaudeStreamMessage(message: any): TranscriptEntry[] {
         subtype: message.is_error ? "error" : "success",
         isError: Boolean(message.is_error),
         durationMs: typeof message.duration_ms === "number" ? message.duration_ms : 0,
+        providerDurationMs: typeof message.duration_ms === "number" ? message.duration_ms : undefined,
         result: typeof message.result === "string" ? message.result : stringFromUnknown(message.result),
         costUsd: typeof message.total_cost_usd === "number" ? message.total_cost_usd : undefined,
         debugRaw,
@@ -909,6 +924,7 @@ export class AgentCoordinator {
       })
     }
     await this.store.recordTurnStarted(args.chatId)
+    const turnStartedAt = Date.now()
     logSendToStartingProfile(args.profile, "start_turn.turn_started_recorded", {
       chatId: args.chatId,
     })
@@ -999,6 +1015,7 @@ export class AgentCoordinator {
       chatId: args.chatId,
       provider: args.provider,
       turn,
+      startedAt: turnStartedAt,
       model: args.model,
       effort: args.effort,
       serviceTier: args.serviceTier,
@@ -1273,10 +1290,18 @@ export class AgentCoordinator {
           continue
         }
 
-        if (!event.entry) continue
-        await this.store.appendMessage(session.chatId, event.entry)
         const active = this.activeTurns.get(session.chatId)
-        if (event.entry.kind === "system_init" && active) {
+        if (!event.entry) continue
+
+        const completedClaudePromptSeq = event.entry.kind === "result" || event.entry.kind === "interrupted"
+          ? (session.pendingPromptSeqs.shift() ?? null)
+          : null
+        const entry = event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)
+          ? withTurnWallClockDuration(event.entry, active.startedAt)
+          : event.entry
+
+        await this.store.appendMessage(session.chatId, entry)
+        if (entry.kind === "system_init" && active) {
           active.status = "running"
           const chat = this.store.getChat(session.chatId)
           if (
@@ -1294,24 +1319,20 @@ export class AgentCoordinator {
           })
         }
 
-        const completedClaudePromptSeq = event.entry.kind === "result" || event.entry.kind === "interrupted"
-          ? (session.pendingPromptSeqs.shift() ?? null)
-          : null
-
         logClaudeSteer("claude_event", {
           chatId: session.chatId,
           sessionId: session.id,
-          entryKind: event.entry.kind,
+          entryKind: entry.kind,
           activePromptSeq: active?.claudePromptSeq ?? null,
           completedPromptSeq: completedClaudePromptSeq,
           activeStatus: active?.status ?? null,
           pendingPromptSeqs: [...session.pendingPromptSeqs],
         })
 
-        if (event.entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
+        if (entry.kind === "result" && active && completedClaudePromptSeq === (active.claudePromptSeq ?? null)) {
           active.hasFinalResult = true
-          if (event.entry.isError) {
-            await this.store.recordTurnFailed(session.chatId, event.entry.result || "Turn failed")
+          if (entry.isError) {
+            await this.store.recordTurnFailed(session.chatId, entry.result || "Turn failed")
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(session.chatId)
           }
@@ -1333,7 +1354,7 @@ export class AgentCoordinator {
             kind: "result",
             subtype: "error",
             isError: true,
-            durationMs: 0,
+            durationMs: elapsedWallClockMs(active.startedAt),
             result: message,
           })
         )
@@ -1397,16 +1418,17 @@ export class AgentCoordinator {
         }
 
         if (!event.entry) continue
-        await this.store.appendMessage(active.chatId, event.entry)
+        const entry = withTurnWallClockDuration(event.entry, active.startedAt)
+        await this.store.appendMessage(active.chatId, entry)
 
-        if (event.entry.kind === "system_init") {
+        if (entry.kind === "system_init") {
           active.status = "running"
         }
 
-        if (event.entry.kind === "result") {
+        if (entry.kind === "result") {
           active.hasFinalResult = true
-          if (event.entry.isError) {
-            await this.store.recordTurnFailed(active.chatId, event.entry.result || "Turn failed")
+          if (entry.isError) {
+            await this.store.recordTurnFailed(active.chatId, entry.result || "Turn failed")
           } else if (!active.cancelRequested) {
             await this.store.recordTurnFinished(active.chatId)
           }
@@ -1431,7 +1453,7 @@ export class AgentCoordinator {
             kind: "result",
             subtype: "error",
             isError: true,
-            durationMs: 0,
+            durationMs: elapsedWallClockMs(active.startedAt),
             result: message,
           })
         )
@@ -1473,7 +1495,7 @@ export class AgentCoordinator {
               kind: "result",
               subtype: "error",
               isError: true,
-              durationMs: 0,
+              durationMs: elapsedWallClockMs(active.startedAt),
               result: message,
             })
           )
@@ -1491,7 +1513,7 @@ export class AgentCoordinator {
               kind: "result",
               subtype: "error",
               isError: true,
-              durationMs: 0,
+              durationMs: elapsedWallClockMs(active.startedAt),
               result: message,
             })
           )
