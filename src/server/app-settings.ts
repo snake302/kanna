@@ -257,6 +257,7 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
     providerCommands: state.providerCommands,
+    appliedProviderCommands: state.appliedProviderCommands,
     warning: state.warning,
     filePathDisplay: state.filePathDisplay,
   }
@@ -308,6 +309,7 @@ function normalizeAppSettings(
     defaultProvider: normalizeDefaultProvider(source?.defaultProvider),
     providerDefaults: normalizeProviderDefaults(source?.providerDefaults),
     providerCommands: normalizeProviderCommands(source?.providerCommands),
+    appliedProviderCommands: normalizeProviderCommands(source?.providerCommands),
     warning: null,
     filePathDisplay: formatDisplayPath(filePath),
   }
@@ -341,7 +343,7 @@ function toComparablePayload(source: AppSettingsFile) {
 }
 
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
-  return normalizeAppSettings({
+  const normalized = normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
     terminal: {
@@ -375,6 +377,11 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
       ...patch.providerCommands,
     },
   }, state.filePathDisplay).payload
+
+  return {
+    ...normalized,
+    appliedProviderCommands: state.appliedProviderCommands,
+  }
 }
 
 export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())) {
@@ -443,7 +450,12 @@ export class AppSettingsManager {
 
   async reload(options?: { persistNormalized?: boolean }) {
     const nextState = await this.readState(options)
-    this.setState(nextState)
+    this.setState(options?.persistNormalized
+      ? nextState
+      : {
+        ...nextState,
+        appliedProviderCommands: this.state.appliedProviderCommands,
+      })
   }
 
   async write(value: { analyticsEnabled: boolean }) {

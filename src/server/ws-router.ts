@@ -485,6 +485,10 @@ export function createWsRouter({
       claude: "",
       codex: "",
     },
+    appliedProviderCommands: {
+      claude: "",
+      codex: "",
+    },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
   }

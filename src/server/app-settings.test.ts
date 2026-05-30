@@ -56,6 +56,10 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
       claude: "",
       codex: "",
     },
+    appliedProviderCommands: {
+      claude: "",
+      codex: "",
+    },
     warning: null,
     filePathDisplay: filePath,
     ...overrides,
@@ -162,6 +166,7 @@ describe("AppSettingsManager", () => {
     expect(snapshot.editor.commandTemplate).toBe("cursor {path}")
     expect(snapshot.providerDefaults.codex.modelOptions.fastMode).toBe(true)
     expect(snapshot.providerCommands.codex).toBe("codex-multi-auth-codex")
+    expect(snapshot.appliedProviderCommands.codex).toBe("")
     expect(nextPayload.analyticsUserId).toBe(initialPayload.analyticsUserId)
     expect(nextPayload.theme).toBe("dark")
     expect(nextPayload.chatSoundId).toBe("glass")
@@ -185,5 +190,28 @@ describe("AppSettingsManager", () => {
       claude: "claude-multi-auth-claude",
       codex: "",
     })
+    expect(snapshot.appliedProviderCommands).toEqual(snapshot.providerCommands)
+  })
+
+  test("keeps applied provider commands stable until restart", async () => {
+    const filePath = await createTempFilePath()
+    await writeFile(filePath, JSON.stringify({
+      providerCommands: {
+        codex: "codex",
+      },
+    }), "utf8")
+    const manager = new AppSettingsManager(filePath)
+    await manager.initialize()
+
+    const snapshot = await manager.writePatch({
+      providerCommands: {
+        codex: "codex-multi-auth-codex",
+      },
+    })
+
+    expect(snapshot.providerCommands.codex).toBe("codex-multi-auth-codex")
+    expect(snapshot.appliedProviderCommands.codex).toBe("codex")
+
+    manager.dispose()
   })
 })
