@@ -440,6 +440,7 @@ export interface AppSettingsSnapshot {
   defaultProvider: DefaultProviderPreference
   providerDefaults: ChatProviderPreferences
   providerCommands: ProviderCommandSettings
+  appliedProviderCommands: ProviderCommandSettings
   warning: string | null
   filePathDisplay: string
 }

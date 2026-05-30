@@ -794,7 +794,7 @@ function SettingsRow({
       >
         <div className="min-w-0 max-w-xl">
           <div className="text-sm font-medium text-foreground">{title}</div>
-          <div className="mt-1 text-[13px] text-muted-foreground">{description}</div>
+          {description ? <div className="mt-1 text-[13px] text-muted-foreground">{description}</div> : null}
         </div>
         <div className="flex items-center justify-start md:shrink-0 md:justify-end">{children}</div>
       </div>
@@ -1215,6 +1215,19 @@ export function SettingsPage() {
       : selectedSection.subtitle
   const showFooter = !isConnecting
   const llmValidationErrorText = llmValidationError ? JSON.stringify(llmValidationError, null, 2) : ""
+  const providerCommandRestartRequired = {
+    claude: appSettings
+      ? appSettings.providerCommands.claude !== appSettings.appliedProviderCommands.claude
+      : false,
+    codex: appSettings
+      ? appSettings.providerCommands.codex !== appSettings.appliedProviderCommands.codex
+      : false,
+  }
+  const restartRequiredDescription = (
+    <span className="text-sm font-medium text-destructive">
+      Restart required to apply changes
+    </span>
+  )
   const llmValidationDescription = (
     <>
       <span>
@@ -1656,10 +1669,10 @@ export function SettingsPage() {
 
                     <SettingsRow
                       title="Claude Code Defaults"
-                      description="Saved defaults when using Claude Code."
+                      description={providerCommandRestartRequired.claude ? restartRequiredDescription : null}
                       alignStart
                     >
-                      <div className="max-w-[420px]">
+                      <div className="flex w-full flex-col gap-3 md:w-[370px]">
                         <ChatPreferenceControls
                           availableProviders={PROVIDERS}
                           selectedProvider="claude"
@@ -1682,7 +1695,7 @@ export function SettingsPage() {
                           includePlanMode
                           className="justify-start flex-wrap"
                         />
-                        <div className="mt-4 space-y-1.5">
+                        <div className="space-y-1.5">
                           <label className="block text-xs font-medium text-muted-foreground" htmlFor="claude-command">
                             Custom launch command
                           </label>
@@ -1694,19 +1707,16 @@ export function SettingsPage() {
                             onKeyDown={(event) => handleTextInputKeyDown(event, () => commitProviderCommand("claude", claudeCommandDraft))}
                             placeholder="claude"
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Leave empty to use the default Claude Code executable. Restart Kanna to apply changes.
-                          </p>
                         </div>
                       </div>
                     </SettingsRow>
 
                     <SettingsRow
                       title="Codex Defaults"
-                      description="Saved defaults when using Codex."
+                      description={providerCommandRestartRequired.codex ? restartRequiredDescription : null}
                       alignStart
                     >
-                      <div className="max-w-[420px]">
+                      <div className="flex w-full flex-col gap-3 md:w-[370px]">
                         <ChatPreferenceControls
                           availableProviders={PROVIDERS}
                           selectedProvider="codex"
@@ -1729,7 +1739,7 @@ export function SettingsPage() {
                           includePlanMode
                           className="justify-start flex-wrap"
                         />
-                        <div className="mt-4 space-y-1.5">
+                        <div className="space-y-1.5">
                           <label className="block text-xs font-medium text-muted-foreground" htmlFor="codex-command">
                             Custom launch command
                           </label>
@@ -1741,9 +1751,6 @@ export function SettingsPage() {
                             onKeyDown={(event) => handleTextInputKeyDown(event, () => commitProviderCommand("codex", codexCommandDraft))}
                             placeholder="codex"
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Leave empty to run Codex as codex. Restart Kanna to apply changes.
-                          </p>
                         </div>
                       </div>
                     </SettingsRow>
@@ -1753,7 +1760,7 @@ export function SettingsPage() {
                       description={llmValidationDescription}
                       alignStart
                     >
-                      <div className="flex w-full max-w-[420px] flex-col gap-3">
+                      <div className="flex w-full flex-col gap-3 md:w-[370px]">
                         {llmProviderError ? (
                           <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                             {llmProviderError}
