@@ -1307,6 +1307,11 @@ export function createWsRouter({
           })
           return
         }
+        case "chat.retry": {
+          const result = await agent.retry(command)
+          send(ws, { v: PROTOCOL_VERSION, type: "ack", id, result })
+          return
+        }
         case "chat.refreshDiffs": {
           const { project } = resolveChatProject(command.chatId)
           const changed = await resolvedDiffStore.refreshSnapshot(project.id, project.localPath)

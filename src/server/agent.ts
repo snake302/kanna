@@ -1197,6 +1197,34 @@ export class AgentCoordinator {
     return { chatId }
   }
 
+  async retry(command: Extract<ClientCommand, { type: "chat.retry" }>) {
+    const chat = this.store.requireChat(command.chatId)
+    const lastUserPrompt = [...this.store.getMessages(command.chatId)]
+      .reverse()
+      .find((entry): entry is Extract<TranscriptEntry, { kind: "user_prompt" }> => entry.kind === "user_prompt")
+
+    if (!lastUserPrompt) {
+      throw new Error("No user message to retry")
+    }
+
+    const provider = this.resolveProvider({}, chat.provider)
+    const settings = this.getProviderSettings(provider, { planMode: chat.planMode })
+    this.analytics.track("message_sent")
+    await this.startTurnForChat({
+      chatId: command.chatId,
+      provider,
+      content: lastUserPrompt.content,
+      attachments: lastUserPrompt.attachments ?? [],
+      model: settings.model,
+      effort: settings.effort,
+      serviceTier: settings.serviceTier,
+      planMode: settings.planMode,
+      appendUserPrompt: false,
+    })
+
+    return { chatId: command.chatId }
+  }
+
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
     this.analytics.track("message_sent")
     const queuedMessage = await this.enqueueMessage(command.chatId, command.content, command.attachments ?? [], {

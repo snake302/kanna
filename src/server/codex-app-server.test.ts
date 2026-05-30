@@ -1813,4 +1813,84 @@ describe("CodexAppServerManager", () => {
     expect(resultEvent?.entry.subtype).toBe("error")
     expect(resultEvent?.entry.result).toContain("fatal: app-server crashed")
   })
+
+  test("keeps the pending turn alive when Codex reports a retryable error before success", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+        child.writeServerMessage({
+          method: "error",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            willRetry: true,
+            error: {
+              message: "temporary upstream error",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "item/completed",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "msg-1",
+              text: "Recovered",
+              phase: "final_answer",
+            },
+          },
+        })
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-1",
+            turn: { id: "turn-1", status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const turn = await manager.startTurn({
+      chatId: "chat-1",
+      model: "gpt-5.4",
+      content: "recover",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const events = await collectStream(turn.stream)
+    const transcriptEntries = events
+      .filter((event) => event.type === "transcript")
+      .map((event) => event.entry)
+    const resultEvent = transcriptEntries.find((entry) => entry.kind === "result")
+
+    expect(transcriptEntries.map((entry) => entry.kind)).toEqual(["system_init", "assistant_text", "result"])
+    expect(resultEvent?.kind).toBe("result")
+    if (!resultEvent || resultEvent.kind !== "result") throw new Error("missing result")
+    expect(resultEvent.subtype).toBe("success")
+    expect(resultEvent.isError).toBe(false)
+  })
 })
