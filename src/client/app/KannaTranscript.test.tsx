@@ -43,6 +43,24 @@ function createToolMessage(id: string, toolId = id): HydratedTranscriptMessage {
   }
 }
 
+function createSubagentMessage(
+  id: string,
+  subagentType: "spawnAgent" | "sendInput" | "resumeAgent" | "wait" | "closeAgent"
+): HydratedTranscriptMessage {
+  return {
+    id,
+    kind: "tool",
+    toolKind: "subagent_task",
+    toolName: "Task",
+    toolId: id,
+    input: {
+      subagentType,
+      receiverThreadIds: [`thread-${id}`],
+    },
+    timestamp: new Date().toISOString(),
+  }
+}
+
 describe("KannaTranscript", () => {
   test("renders user attachment cards outside the user bubble", () => {
     const html = renderTranscript([
@@ -393,6 +411,36 @@ Please check the latest error first.`,
     expect(rows[0]?.kind).toBe("tool-group")
     if (rows[0]?.kind !== "tool-group") throw new Error("unexpected row kind")
     expect(rows[0].messages.map((message) => message.id)).toEqual(["tool-1", "tool-2"])
+  })
+
+  test("does not collapse different subagent actions into one tool group", () => {
+    const rows = buildResolvedTranscriptRows([
+      createSubagentMessage("agent-1", "spawnAgent"),
+      createSubagentMessage("agent-2", "sendInput"),
+    ], {
+      isLoading: true,
+      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+    })
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.kind).toBe("single")
+    expect(rows[1]?.kind).toBe("single")
+  })
+
+  test("labels grouped subagent actions by action type", () => {
+    const html = renderToStaticMarkup(
+      <CollapsedToolGroup
+        messages={[
+          createSubagentMessage("agent-1", "spawnAgent"),
+          createSubagentMessage("agent-2", "spawnAgent"),
+        ]}
+        isLoading
+        expanded={false}
+        onExpandedChange={() => undefined}
+      />
+    )
+
+    expect(html).toContain("2 agent starts")
   })
 
   test("does not group collapsible tools across visible transcript rows", () => {

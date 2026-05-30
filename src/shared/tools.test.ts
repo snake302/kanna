@@ -51,6 +51,36 @@ describe("normalizeToolCall", () => {
     expect(tool.input.server).toBe("sentry")
     expect(tool.input.tool).toBe("search_issues")
   })
+
+  test("preserves subagent task flow fields", () => {
+    const tool = normalizeToolCall({
+      toolName: "Task",
+      toolId: "agent-1",
+      input: {
+        subagent_type: "spawnAgent",
+        status: "completed",
+        sender_thread_id: "thread-1",
+        receiver_thread_ids: ["thread-2"],
+        prompt: "Inspect tests",
+        agents_states: {
+          "thread-2": { status: "running", message: "Inspecting" },
+        },
+      },
+    })
+
+    expect(tool.toolKind).toBe("subagent_task")
+    if (tool.toolKind !== "subagent_task") throw new Error("unexpected tool kind")
+    expect(tool.input).toEqual({
+      subagentType: "spawnAgent",
+      status: "completed",
+      senderThreadId: "thread-1",
+      receiverThreadIds: ["thread-2"],
+      prompt: "Inspect tests",
+      agentsStates: {
+        "thread-2": { status: "running", message: "Inspecting" },
+      },
+    })
+  })
 })
 
 describe("hydrateToolResult", () => {
