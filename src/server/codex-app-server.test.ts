@@ -1130,7 +1130,134 @@ describe("CodexAppServerManager", () => {
     expect(toolCall?.entry.kind).toBe("tool_call")
     if (!toolCall || toolCall.entry.kind !== "tool_call") throw new Error("missing tool call")
     expect(toolCall.entry.tool.toolKind).toBe("subagent_task")
-    expect(toolCall.entry.tool.input).toEqual({ subagentType: "spawnAgent" })
+    expect(toolCall.entry.tool.input).toEqual({
+      subagentType: "spawnAgent",
+      status: "completed",
+      senderThreadId: "thread-1",
+      receiverThreadIds: ["thread-2"],
+      prompt: "Inspect tests",
+      agentsStates: {
+        "thread-2": { status: "running", message: "Inspecting" },
+      },
+    })
+  })
+
+  test("keeps child subagent thread events out of the parent transcript", async () => {
+    let turnStarts = 0
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        turnStarts += 1
+        const turnId = `turn-${turnStarts}`
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: turnId, status: "inProgress", error: null } },
+        })
+
+        if (turnStarts === 1) {
+          child.writeServerMessage({
+            method: "thread/started",
+            params: { thread: { id: "thread-2" } },
+          })
+          child.writeServerMessage({
+            method: "item/completed",
+            params: {
+              threadId: "thread-2",
+              turnId: "child-turn-1",
+              item: {
+                type: "agentMessage",
+                id: "child-message-1",
+                text: "subagent output",
+              },
+            },
+          })
+          child.writeServerMessage({
+            method: "turn/completed",
+            params: {
+              threadId: "thread-2",
+              turn: { id: "child-turn-1", status: "completed", error: null },
+            },
+          })
+          child.writeServerMessage({
+            method: "item/completed",
+            params: {
+              threadId: "thread-1",
+              turnId,
+              item: {
+                type: "agentMessage",
+                id: "parent-message-1",
+                text: "parent final",
+              },
+            },
+          })
+        } else {
+          child.writeServerMessage({
+            method: "item/completed",
+            params: {
+              threadId: "thread-1",
+              turnId,
+              item: {
+                type: "agentMessage",
+                id: "parent-message-2",
+                text: "second parent",
+              },
+            },
+          })
+        }
+
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: {
+            threadId: "thread-1",
+            turn: { id: turnId, status: "completed", error: null },
+          },
+        })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    const firstTurn = await manager.startTurn({
+      chatId: "chat-1",
+      model: "gpt-5.4",
+      content: "spawn an agent",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+
+    const firstEvents = await collectStream(firstTurn.stream)
+    const firstAssistantTexts = firstEvents
+      .filter((event) => event.type === "transcript" && event.entry.kind === "assistant_text")
+      .map((event) => event.entry.text)
+
+    expect(firstAssistantTexts).toEqual(["parent final"])
+
+    const secondTurn = await manager.startTurn({
+      chatId: "chat-1",
+      model: "gpt-5.4",
+      content: "continue",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+    await collectStream(secondTurn.stream)
+
+    const turnStartMessages = process.messages.filter((entry: any) => entry.method === "turn/start") as any[]
+    expect(turnStartMessages[1]?.params.threadId).toBe("thread-1")
   })
 
   test("uses the completed webSearch query when the started item is empty", async () => {
@@ -1679,6 +1806,64 @@ describe("CodexAppServerManager", () => {
         threadId: "thread-1",
         turnId: "turn-1",
       },
+    })
+  })
+
+  test("steers the active Codex turn", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+      } else if (message.method === "turn/steer") {
+        child.writeServerMessage({ id: message.id, result: { turnId: "turn-1" } })
+      }
+    })
+
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+    })
+
+    await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.4",
+      sessionToken: null,
+    })
+
+    await manager.startTurn({
+      chatId: "chat-1",
+      model: "gpt-5.4",
+      content: "wait",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+    await manager.steerTurn({
+      chatId: "chat-1",
+      content: "how are the agents doing?",
+    })
+
+    const steerRequest = process.messages.find((message: any) => message.method === "turn/steer") as
+      | { id: string; method: "turn/steer"; params: { threadId: string; expectedTurnId: string; input: Array<{ type: string; text: string; text_elements: [] }> } }
+      | undefined
+    expect(steerRequest).toBeDefined()
+    if (!steerRequest) throw new Error("missing steer request")
+    expect(steerRequest.params).toEqual({
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [{
+        type: "text",
+        text: "how are the agents doing?",
+        text_elements: [],
+      }],
     })
   })
 

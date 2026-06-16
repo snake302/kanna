@@ -647,8 +647,22 @@ export interface EditFileToolCall
 export interface DeleteFileToolCall
   extends ToolCallBase<"delete_file", { filePath: string; content: string }> { }
 
+export interface SubagentTaskAgentState {
+  status: string
+  message?: string | null
+}
+
+export interface SubagentTaskInput {
+  subagentType?: string
+  status?: string
+  senderThreadId?: string
+  receiverThreadIds?: string[]
+  prompt?: string | null
+  agentsStates?: Record<string, SubagentTaskAgentState>
+}
+
 export interface SubagentTaskToolCall
-  extends ToolCallBase<"subagent_task", { subagentType?: string }> { }
+  extends ToolCallBase<"subagent_task", SubagentTaskInput> { }
 
 export interface McpGenericToolCall
   extends ToolCallBase<"mcp_generic", { server: string; tool: string; payload: Record<string, unknown> }> { }

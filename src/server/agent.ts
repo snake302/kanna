@@ -1178,8 +1178,26 @@ export class AgentCoordinator {
     }
 
     const chat = this.store.requireChat(chatId)
-    if (this.activeTurns.has(chatId)) {
+    const activeTurn = this.activeTurns.get(chatId)
+    if (activeTurn) {
       this.analytics.track("message_sent")
+      if (activeTurn.provider === "codex") {
+        await this.codexManager.steerTurn({
+          chatId,
+          content: buildPromptText(command.content, command.attachments ?? []),
+        })
+        await this.store.appendMessage(
+          chatId,
+          timestamped({
+            kind: "user_prompt",
+            content: command.content,
+            attachments: command.attachments ?? [],
+          })
+        )
+        this.emitStateChange(chatId)
+        return { chatId, steered: true as const }
+      }
+
       const queuedMessage = await this.enqueueMessage(chatId, command.content, command.attachments ?? [], {
         provider: command.provider,
         model: command.model,

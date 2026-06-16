@@ -89,6 +89,61 @@ describe("processTranscriptMessages", () => {
     expect(messages[0].result).toEqual({ discarded: true })
   })
 
+  test("keeps subagent task fields through hydration", () => {
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "tool_call",
+        tool: {
+          kind: "tool",
+          toolKind: "subagent_task",
+          toolName: "Task",
+          toolId: "agent-1",
+          input: {
+            subagentType: "spawnAgent",
+            status: "inProgress",
+            senderThreadId: "thread-1",
+            receiverThreadIds: ["thread-2"],
+            prompt: "Inspect tests",
+            agentsStates: {
+              "thread-2": { status: "running", message: "Inspecting" },
+            },
+          },
+        },
+      }),
+      entry({
+        kind: "tool_result",
+        toolId: "agent-1",
+        content: {
+          type: "collabAgentToolCall",
+          id: "agent-1",
+          tool: "spawnAgent",
+          status: "completed",
+        },
+      }),
+    ])
+
+    expect(messages[0]?.kind).toBe("tool")
+    if (messages[0]?.kind !== "tool" || messages[0].toolKind !== "subagent_task") {
+      throw new Error("unexpected message")
+    }
+    expect(messages[0].input).toEqual({
+      subagentType: "spawnAgent",
+      status: "inProgress",
+      senderThreadId: "thread-1",
+      receiverThreadIds: ["thread-2"],
+      prompt: "Inspect tests",
+      agentsStates: {
+        "thread-2": { status: "running", message: "Inspecting" },
+      },
+    })
+    expect(messages[0].result).toEqual({
+      type: "collabAgentToolCall",
+      id: "agent-1",
+      tool: "spawnAgent",
+      status: "completed",
+    })
+  })
+
   test("preserves attachments on hydrated user prompts", () => {
     const messages = processTranscriptMessages([
       entry({

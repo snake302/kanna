@@ -11,6 +11,7 @@ import type {
   TodoItem,
   TranscriptEntry,
 } from "../shared/types"
+import { normalizeSubagentTaskInput } from "../shared/tools"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import {
   type CollabAgentToolCallItem,
@@ -49,6 +50,8 @@ import {
   type TurnInterruptParams,
   type TurnStartParams,
   type TurnStartResponse,
+  type TurnSteerParams,
+  type TurnSteerResponse,
   isJsonRpcResponse,
   isServerNotification,
   isServerRequest,
@@ -75,6 +78,7 @@ interface PendingRequest<TResult> {
 }
 
 interface PendingTurn {
+  threadId: string | null
   turnId: string | null
   model: string
   planMode: boolean
@@ -133,6 +137,11 @@ export interface StartCodexTurnArgs {
   planMode: boolean
   onToolRequest: (request: HarnessToolRequest) => Promise<unknown>
   onApprovalRequest?: PendingTurn["onApprovalRequest"]
+}
+
+export interface SteerCodexTurnArgs {
+  chatId: string
+  content: string
 }
 
 export interface GenerateStructuredArgs {
@@ -340,6 +349,8 @@ function genericDynamicToolCall(toolId: string, toolName: string, input: Record<
 }
 
 function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
+  const rawInput = item as unknown as Record<string, unknown>
+
   return timestamped({
     kind: "tool_call",
     tool: {
@@ -347,10 +358,8 @@ function collabToolCall(item: CollabAgentToolCallItem): TranscriptEntry {
       toolKind: "subagent_task",
       toolName: "Task",
       toolId: item.id,
-      input: {
-        subagentType: item.tool,
-      },
-      rawInput: item as unknown as Record<string, unknown>,
+      input: normalizeSubagentTaskInput(rawInput),
+      rawInput,
     },
   })
 }
@@ -734,6 +743,32 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   }
 }
 
+function isCurrentTurnNotification(
+  pendingTurn: PendingTurn,
+  notification: { threadId: string; turnId?: string }
+) {
+  if (pendingTurn.threadId && notification.threadId !== pendingTurn.threadId) {
+    return false
+  }
+  if (pendingTurn.turnId && notification.turnId && notification.turnId !== pendingTurn.turnId) {
+    return false
+  }
+  return true
+}
+
+function isCompletedCurrentTurnNotification(
+  pendingTurn: PendingTurn,
+  notification: TurnCompletedNotification
+) {
+  if (pendingTurn.threadId && notification.threadId !== pendingTurn.threadId) {
+    return false
+  }
+  if (pendingTurn.turnId && notification.turn.id !== pendingTurn.turnId) {
+    return false
+  }
+  return true
+}
+
 export class CodexAppServerManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnCodexAppServer
@@ -846,6 +881,7 @@ export class CodexAppServerManager {
     queue.push({ type: "transcript", entry: codexSystemInitEntry(args.model) })
 
     const pendingTurn: PendingTurn = {
+      threadId: context.sessionToken,
       turnId: null,
       model: args.model,
       planMode: args.planMode,
@@ -918,6 +954,26 @@ export class CodexAppServerManager {
       },
       close: () => {},
     }
+  }
+
+  async steerTurn(args: SteerCodexTurnArgs): Promise<void> {
+    const context = this.requireSession(args.chatId)
+    const pendingTurn = context.pendingTurn
+    if (!pendingTurn || !pendingTurn.turnId || !context.sessionToken) {
+      throw new Error("Codex turn is not steerable")
+    }
+
+    await this.sendRequest<TurnSteerResponse>(context, "turn/steer", {
+      threadId: context.sessionToken,
+      input: [
+        {
+          type: "text",
+          text: args.content,
+          text_elements: [],
+        },
+      ],
+      expectedTurnId: pendingTurn.turnId,
+    } satisfies TurnSteerParams)
   }
 
   async generateStructured(args: GenerateStructuredArgs): Promise<string | null> {
@@ -1194,11 +1250,14 @@ export class CodexAppServerManager {
 
   private async handleNotification(context: SessionContext, notification: ServerNotification) {
     if (notification.method === "thread/started") {
-      context.sessionToken = notification.params.thread.id
-      if (context.pendingTurn) {
+      const threadId = notification.params.thread.id
+      if (!context.pendingTurn || !context.sessionToken || threadId === context.sessionToken) {
+        context.sessionToken = threadId
+      }
+      if (context.pendingTurn && threadId === context.pendingTurn.threadId) {
         context.pendingTurn.queue.push({
           type: "session_token",
-          sessionToken: notification.params.thread.id,
+          sessionToken: threadId,
         })
       }
       return
@@ -1209,24 +1268,31 @@ export class CodexAppServerManager {
 
     switch (notification.method) {
       case "thread/tokenUsage/updated":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handleTokenUsageUpdated(pendingTurn, notification.params)
         return
       case "turn/plan/updated":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handlePlanUpdated(pendingTurn, notification.params)
         return
       case "item/started":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handleItemStarted(pendingTurn, notification.params)
         return
       case "item/completed":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handleItemCompleted(pendingTurn, notification.params)
         return
       case "item/plan/delta":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handlePlanDelta(pendingTurn, notification.params)
         return
       case "turn/completed":
+        if (!isCompletedCurrentTurnNotification(pendingTurn, notification.params)) return
         await this.handleTurnCompleted(context, notification.params)
         return
       case "thread/compacted":
+        if (!isCurrentTurnNotification(pendingTurn, notification.params)) return
         this.handleContextCompacted(pendingTurn, notification.params)
         return
       case "error":
