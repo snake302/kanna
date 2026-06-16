@@ -82,6 +82,7 @@ interface PendingTurn {
   turnId: string | null
   model: string
   planMode: boolean
+  startedAt: number
   queue: AsyncQueue<HarnessEvent>
   startedToolIds: Set<string>
   handledDynamicToolIds: Set<string>
@@ -254,6 +255,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function elapsedWallClockMs(startedAt: number, endedAt = Date.now()) {
+  return Math.max(0, endedAt - startedAt)
 }
 
 function normalizeCodexTokenUsage(
@@ -885,6 +890,7 @@ export class CodexAppServerManager {
       turnId: null,
       model: args.model,
       planMode: args.planMode,
+      startedAt: Date.now(),
       queue,
       startedToolIds: new Set(),
       handledDynamicToolIds: new Set(),
@@ -1491,7 +1497,7 @@ export class CodexAppServerManager {
         kind: "result",
         subtype: isCancelled ? "cancelled" : isError ? "error" : "success",
         isError,
-        durationMs: 0,
+        durationMs: elapsedWallClockMs(pendingTurn.startedAt),
         result: notification.turn.error?.message ?? "",
       }),
     })
@@ -1508,7 +1514,7 @@ export class CodexAppServerManager {
           kind: "result",
           subtype: "error",
           isError: true,
-          durationMs: 0,
+          durationMs: elapsedWallClockMs(pendingTurn.startedAt),
           result: message,
         }),
       })

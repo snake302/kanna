@@ -10,7 +10,7 @@ import { AskUserQuestionMessage } from "../components/messages/AskUserQuestionMe
 import { ExitPlanModeMessage } from "../components/messages/ExitPlanModeMessage"
 import { TodoWriteMessage } from "../components/messages/TodoWriteMessage"
 import { ToolCallMessage } from "../components/messages/ToolCallMessage"
-import { ResultMessage } from "../components/messages/ResultMessage"
+import { ResultMessage, shouldShowResultDuration } from "../components/messages/ResultMessage"
 import { InterruptedMessage } from "../components/messages/InterruptedMessage"
 import { CompactBoundaryMessage, ContextClearedMessage } from "../components/messages/CompactBoundaryMessage"
 import { CompactSummaryMessage } from "../components/messages/CompactSummaryMessage"
@@ -109,7 +109,7 @@ function getTranscriptMessageRenderState(
         shouldRender = message.toolKind !== "todo_write" || isLatestTodoWrite
         break
       case "result":
-        shouldRender = !hideResult && (!message.success || message.durationMs > 60000)
+        shouldRender = !hideResult && (!message.success || shouldShowResultDuration(message.durationMs))
         break
       case "context_window_updated":
         shouldRender = false

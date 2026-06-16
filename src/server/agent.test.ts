@@ -105,6 +105,7 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(entries[0]?.kind).toBe("result")
     if (entries[0]?.kind !== "result") throw new Error("unexpected entry")
     expect(entries[0].durationMs).toBe(3210)
+    expect(entries[0].providerDurationMs).toBe(3210)
   })
 
   test("normalizes Claude usage snapshots from SDK usage payloads", () => {
@@ -1724,6 +1725,77 @@ describe("AgentCoordinator claude integration", () => {
     }])
     expect(store.chat.pendingForkSessionToken).toBeNull()
     events.close()
+  })
+
+  test("stores Kanna wall-clock duration on final results", async () => {
+    const originalDateNow = Date.now
+    let now = 10_000
+    Date.now = () => now
+
+    try {
+      const fakeCodexManager = {
+        async startSession() {},
+        async startTurn(): Promise<HarnessTurn> {
+          async function* stream() {
+            yield {
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "codex",
+                model: "gpt-5.4",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            }
+            now += 3250
+            yield {
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "",
+              }),
+            }
+          }
+
+          return {
+            provider: "codex",
+            stream: stream(),
+            interrupt: async () => {},
+            close: () => {},
+          }
+        },
+      }
+
+      const store = createFakeStore()
+      const coordinator = new AgentCoordinator({
+        store: store as never,
+        onStateChange: () => {},
+        codexManager: fakeCodexManager as never,
+      })
+
+      await coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "codex",
+        content: "measure this",
+        model: "gpt-5.4",
+      })
+
+      for (let attempt = 0; attempt < 20 && store.turnFinishedCount === 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      const result = store.messages.find((entry) => entry.kind === "result")
+      expect(store.turnFinishedCount).toBe(1)
+      expect(result?.durationMs).toBe(3250)
+    } finally {
+      Date.now = originalDateNow
+    }
   })
 })
 
