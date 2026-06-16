@@ -126,6 +126,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const agent = new AgentCoordinator({
     store,
     analytics,
+    providerCommands: appSettings.getSnapshot().providerCommands,
     onStateChange: (chatId?: string, options?: { immediate?: boolean }) => {
       if (chatId) {
         if (options?.immediate) {

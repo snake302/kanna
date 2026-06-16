@@ -23,6 +23,7 @@ import {
   type CodexModelOptions,
   type DefaultProviderPreference,
   type EditorPreset,
+  type ProviderCommandSettings,
   type ProviderPreference,
 } from "../shared/types"
 
@@ -46,6 +47,7 @@ interface AppSettingsFile {
     claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: unknown }
     codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: unknown }
   }
+  providerCommands?: Partial<Record<keyof ProviderCommandSettings, unknown>>
 }
 
 interface AppSettingsState extends AppSettingsSnapshot {
@@ -108,6 +110,13 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
       modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
       planMode: false,
     },
+  }
+}
+
+function createDefaultProviderCommands(): ProviderCommandSettings {
+  return {
+    claude: "",
+    codex: "",
   }
 }
 
@@ -212,6 +221,14 @@ function normalizeProviderDefaults(value: AppSettingsFile["providerDefaults"] | 
   }
 }
 
+function normalizeProviderCommands(value: AppSettingsFile["providerCommands"] | undefined): ProviderCommandSettings {
+  const defaults = createDefaultProviderCommands()
+  return {
+    claude: typeof value?.claude === "string" ? value.claude.trim() : defaults.claude,
+    codex: typeof value?.codex === "string" ? value.codex.trim() : defaults.codex,
+  }
+}
+
 function toFilePayload(state: AppSettingsState) {
   return {
     analyticsEnabled: state.analyticsEnabled,
@@ -224,6 +241,7 @@ function toFilePayload(state: AppSettingsState) {
     editor: state.editor,
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
+    providerCommands: state.providerCommands,
   }
 }
 
@@ -238,6 +256,8 @@ function toSnapshot(state: AppSettingsState): AppSettingsSnapshot {
     editor: state.editor,
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
+    providerCommands: state.providerCommands,
+    appliedProviderCommands: state.appliedProviderCommands,
     warning: state.warning,
     filePathDisplay: state.filePathDisplay,
   }
@@ -288,6 +308,8 @@ function normalizeAppSettings(
     },
     defaultProvider: normalizeDefaultProvider(source?.defaultProvider),
     providerDefaults: normalizeProviderDefaults(source?.providerDefaults),
+    providerCommands: normalizeProviderCommands(source?.providerCommands),
+    appliedProviderCommands: normalizeProviderCommands(source?.providerCommands),
     warning: null,
     filePathDisplay: formatDisplayPath(filePath),
   }
@@ -316,11 +338,12 @@ function toComparablePayload(source: AppSettingsFile) {
     editor: source.editor,
     defaultProvider: source.defaultProvider,
     providerDefaults: source.providerDefaults,
+    providerCommands: source.providerCommands,
   }
 }
 
 function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettingsState {
-  return normalizeAppSettings({
+  const normalized = normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
     terminal: {
@@ -349,7 +372,16 @@ function applyPatch(state: AppSettingsState, patch: AppSettingsPatch): AppSettin
         },
       },
     },
+    providerCommands: {
+      ...state.providerCommands,
+      ...patch.providerCommands,
+    },
   }, state.filePathDisplay).payload
+
+  return {
+    ...normalized,
+    appliedProviderCommands: state.appliedProviderCommands,
+  }
 }
 
 export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())) {
@@ -418,7 +450,12 @@ export class AppSettingsManager {
 
   async reload(options?: { persistNormalized?: boolean }) {
     const nextState = await this.readState(options)
-    this.setState(nextState)
+    this.setState(options?.persistNormalized
+      ? nextState
+      : {
+        ...nextState,
+        appliedProviderCommands: this.state.appliedProviderCommands,
+      })
   }
 
   async write(value: { analyticsEnabled: boolean }) {

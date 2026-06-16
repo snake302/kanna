@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { homedir } from "node:os"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import type {
@@ -737,9 +738,10 @@ export class CodexAppServerManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnCodexAppServer
 
-  constructor(args: { spawnProcess?: SpawnCodexAppServer } = {}) {
+  constructor(args: { spawnProcess?: SpawnCodexAppServer; command?: string } = {}) {
+    const command = (args.command?.trim() || "codex").replace(/^~(?=\/|$)/, homedir())
     this.spawnProcess = args.spawnProcess ?? ((cwd) =>
-      spawn("codex", ["app-server"], {
+      spawn(command, ["app-server"], {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         env: process.env,

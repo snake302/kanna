@@ -197,6 +197,8 @@ export type ChatProviderPreferences = {
   codex: ProviderPreference<CodexModelOptions>
 }
 
+export type ProviderCommandSettings = Record<AgentProvider, string>
+
 export type ModelOptions = Partial<{
   [K in AgentProvider]: Partial<ProviderModelOptionsByProvider[K]>
 }>
@@ -452,6 +454,8 @@ export interface AppSettingsSnapshot {
   }
   defaultProvider: DefaultProviderPreference
   providerDefaults: ChatProviderPreferences
+  providerCommands: ProviderCommandSettings
+  appliedProviderCommands: ProviderCommandSettings
   warning: string | null
   filePathDisplay: string
 }
@@ -469,6 +473,7 @@ export interface AppSettingsPatch {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
   }
+  providerCommands?: Partial<ProviderCommandSettings>
 }
 
 export interface LlmProviderFile {

@@ -481,6 +481,14 @@ export function createWsRouter({
         planMode: false,
       },
     },
+    providerCommands: {
+      claude: "",
+      codex: "",
+    },
+    appliedProviderCommands: {
+      claude: "",
+      codex: "",
+    },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
   }
@@ -512,6 +520,10 @@ export function createWsRouter({
           ...patch.providerDefaults?.codex?.modelOptions,
         },
       },
+    },
+    providerCommands: {
+      ...snapshot.providerCommands,
+      ...patch.providerCommands,
     },
   })
   const resolvedAppSettings = {
