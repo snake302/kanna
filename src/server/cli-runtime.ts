@@ -1,7 +1,7 @@
 import process from "node:process"
 import { spawnSync } from "node:child_process"
 import { hasCommand, spawnDetached } from "./process-utils"
-import { APP_NAME, CLI_COMMAND, getDataDirDisplay, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
+import { APP_NAME, CLI_COMMAND, getDataDirDisplay, getRuntimeProfile, LOG_PREFIX, PACKAGE_NAME } from "../shared/branding"
 import type { ShareMode } from "../shared/share"
 import { assertNoHostOverride, getShareCliFlag, isShareEnabled, isTokenShareMode } from "../shared/share"
 import type { UpdateInstallErrorCode } from "../shared/types"
@@ -213,6 +213,9 @@ function normalizeVersion(version: string) {
 
 async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
   if (process.env.KANNA_DISABLE_SELF_UPDATE === "1") {
+    return null
+  }
+  if (getRuntimeProfile() === "dev") {
     return null
   }
 

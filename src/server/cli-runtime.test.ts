@@ -308,6 +308,7 @@ describe("runCli", () => {
 
     await runCli(["--port", "4000", "--no-open"], deps)
 
+    expect(calls.fetchLatestVersion).toEqual([])
     expect(calls.log).toContain("[kanna] data dir: ~/.kanna-dev/data")
   })
 
