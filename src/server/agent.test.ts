@@ -495,6 +495,75 @@ describe("AgentCoordinator codex integration", () => {
     ])
   })
 
+  test("retries the latest user prompt without appending a duplicate user message", async () => {
+    const startTurnCalls: Array<{ content: string; planMode: boolean }> = []
+    const fakeCodexManager = {
+      async startSession() {},
+      async startTurn(args: { content: string; planMode: boolean }): Promise<HarnessTurn> {
+        startTurnCalls.push({ content: args.content, planMode: args.planMode })
+        async function* stream() {
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "system_init",
+              provider: "codex",
+              model: "gpt-5.4",
+              tools: [],
+              agents: [],
+              slashCommands: [],
+              mcpServers: [],
+            }),
+          }
+          yield {
+            type: "transcript" as const,
+            entry: timestamped({
+              kind: "result",
+              subtype: "success",
+              isError: false,
+              durationMs: 0,
+              result: "",
+            }),
+          }
+        }
+
+        return {
+          provider: "codex",
+          stream: stream(),
+          interrupt: async () => {},
+          close: () => {},
+        }
+      },
+    }
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      codexManager: fakeCodexManager as never,
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "codex",
+      content: "fix reconnect",
+      planMode: true,
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+    await coordinator.retry({
+      type: "chat.retry",
+      chatId: "chat-1",
+    })
+    await waitFor(() => store.turnFinishedCount === 2)
+
+    expect(startTurnCalls).toEqual([
+      { content: "fix reconnect", planMode: true },
+      { content: "fix reconnect", planMode: true },
+    ])
+    expect(store.messages.filter((entry) => entry.kind === "user_prompt")).toHaveLength(1)
+  })
+
   test("maps codex model options into session and turn settings", async () => {
     const sessionCalls: Array<{ chatId: string; sessionToken: string | null; serviceTier?: string }> = []
     const turnCalls: Array<{ effort?: string; serviceTier?: string }> = []

@@ -136,6 +136,7 @@ export type ClientCommand =
       effort?: string
       planMode?: boolean
     }
+  | { type: "chat.retry"; chatId: string }
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.initGit"; chatId: string }
   | { type: "chat.getGitHubPublishInfo"; chatId: string }

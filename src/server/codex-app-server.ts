@@ -1230,6 +1230,9 @@ export class CodexAppServerManager {
         this.handleContextCompacted(pendingTurn, notification.params)
         return
       case "error":
+        if (notification.params.willRetry) {
+          return
+        }
         this.failContext(context, notification.params.error.message)
         return
       default:
